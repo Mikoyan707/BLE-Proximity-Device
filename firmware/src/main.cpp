@@ -1,54 +1,65 @@
 #include <Arduino.h>
+
 #include "config.h"
+#include "ble_proximity.h"
+#include "proximity.h"
+#include "output.h"
 
 void setup()
 {
-    // Start serial communication for debugging
     Serial.begin(115200);
 
-    // Give the serial interface a moment to initialize
     delay(500);
 
     Serial.println();
-    Serial.println("=================================");
-    Serial.println("ESP32-C3 BLE Proximity Device");
-    Serial.println("Hardware Test Firmware");
-    Serial.println("=================================");
+    Serial.println("========================================");
+    Serial.println(" ESP32-C3 BLE PROXIMITY DEVICE");
+    Serial.println("========================================");
 
-    // GPIO2 controls the LED transistor
-    pinMode(LED_PIN, OUTPUT);
+    // Hardware output initialization
+    outputInit();
 
-    // GPIO9 has an external 10 kΩ pull-up.
-    // SW2 pulls it LOW when pressed.
-    pinMode(BUTTON_PIN, INPUT);
+    // Proximity algorithm initialization
+    proximityInit();
 
-    // Start with LED OFF
-    digitalWrite(LED_PIN, LOW);
+    // BLE advertising + scanning
+    bleProximityInit();
 
-    Serial.println("Hardware initialized.");
-    Serial.println("Press SW2 to turn the LED ON.");
+    Serial.println("[SYSTEM] Initialization complete.");
+    Serial.println("[SYSTEM] Waiting for another proximity device...");
 }
 
 void loop()
 {
-    // Read SW2
-    bool buttonPressed = (digitalRead(BUTTON_PIN) == LOW);
+    unsigned long now = millis();
 
-    if (buttonPressed)
+    // Evaluate the latest RSSI measurement.
+    updateProximity(now);
+
+    // Periodic diagnostic information.
+    static unsigned long lastStatus = 0;
+
+    if (now - lastStatus >= 1000)
     {
-        digitalWrite(LED_PIN, HIGH);
+        lastStatus = now;
 
-        Serial.println("SW2 PRESSED -> LED ON");
-
-        // Small delay to avoid flooding Serial
-        delay(100);
+        if (isPeerPresent())
+        {
+            Serial.printf(
+                "[STATUS] Peer detected | RSSI: %d dBm | State: %s\n",
+                getFilteredRSSI(),
+                getProximityState() == ProximityState::NEAR
+                    ? "NEAR"
+                    : "FAR"
+            );
+        }
+        else
+        {
+            Serial.println(
+                "[STATUS] No proximity device detected | State: FAR"
+            );
+        }
     }
-    else
-    {
-        digitalWrite(LED_PIN, LOW);
 
-        Serial.println("SW2 RELEASED -> LED OFF");
-
-        delay(100);
-    }
+    delay(10);
 }
